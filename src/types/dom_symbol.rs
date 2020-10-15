@@ -1,3 +1,8 @@
+#[cfg(feature = "render-raqote")]
+use crate::types::dom_shape::{
+    EdgeDefinitionCommand,
+    SelectionMask,
+};
 use crate::types::{
     DomLayer,
     DomTimeline,
@@ -101,10 +106,10 @@ impl DomSymbol {
         let draw_target_width = (bounding_box.width() * scale) as i32 + padding as i32;
         let draw_target_height = (bounding_box.height() * scale) as i32 + padding as i32;
 
-        let num_frames = symbol.num_frames();
+        let num_frames = self.num_frames();
         let mut frames = Vec::with_capacity(num_frames);
 
-        let mut layers: Vec<_> = symbol
+        let mut layers: Vec<_> = self
             .get_layers()
             .iter()
             .map(|layer| layer.get_frames().iter().cycle())

@@ -5,6 +5,10 @@ authors = [ "adumbidiot <nathaniel.daniel23@outlook.com>" ]
 edition = "2018"
 license = "MIT"
 
+[[bin]]
+name = "fla"
+required-features = [ "cli" ]
+
 [dependencies]
 bitflags = "1.2.1"
 euclid = "0.20.0"
@@ -15,7 +19,8 @@ zip = "0.5.8"
 
 # Optional
 raqote = { version = "0.8.0", default-features = false, optional = true }
+argh = { version = "0.1.3", optional = true }
 
 [features]
 render-raqote = [ "raqote" ]
-cli = [ "render-raqote" ]
+cli = [ "argh", "render-raqote" ]
