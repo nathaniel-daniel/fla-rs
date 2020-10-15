@@ -20,7 +20,7 @@ jobs:
           components: rustfmt, clippy 
           override: true
       
-      - name: check rustfmt
+      - name: RustFmt
         uses: actions-rs/cargo@v1
         with:
           command: fmt
@@ -45,7 +45,7 @@ jobs:
         uses: actions/checkout@v2
         
       - name: Deny
-        uses: EmbarkStudios/cargo-deny-action@v1
+        uses: EmbarkStudios/cargo-deny-action@v1.1.0
         
   build:
     name: Build

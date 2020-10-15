@@ -55,7 +55,6 @@ impl LibraryEntry {
         {
             Some("xml") => {
                 let dom_symbol: DomSymbol = quick_xml::de::from_reader(reader)?;
-
                 Ok(Self::Xml(dom_symbol))
             }
             Some(_) | None => {
