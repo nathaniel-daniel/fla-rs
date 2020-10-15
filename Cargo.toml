@@ -9,7 +9,13 @@ license = "MIT"
 bitflags = "1.2.1"
 euclid = "0.20.0"
 quick-xml = { version = "0.19.0", features = [ "serialize" ] }
-raqote = "0.8.0"
 serde = { version = "1.0.116", features = [ "derive" ] }
 thiserror = "1.0.21"
 zip = "0.5.8"
+
+# Optional
+raqote = { version = "0.8.0", default-features = false, optional = true }
+
+[features]
+render-raqote = [ "raqote" ]
+cli = [ "render-raqote" ]
