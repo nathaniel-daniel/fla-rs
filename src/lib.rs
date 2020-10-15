@@ -37,6 +37,12 @@ pub enum DomSymbolRenderError {
     #[error("Missing FillStyle {0}")]
     MissingFillStyle(u64),
 
+    #[error("Missing Fill Stroke Style Index")]
+    MissingStrokeStyleIndex,
+
+    #[error("Missing StrokeStyle {0}")]
+    MissingStrokeStyle(u64),
+
     #[error("Missing Color")]
     MissingColor,
 
@@ -51,12 +57,13 @@ pub enum DomSymbolRenderError {
 pub fn render_dom_symbol(
     symbol: &DomSymbol,
     scale: f64,
+    padding: f64,
 ) -> Result<Vec<raqote::DrawTarget>, DomSymbolRenderError> {
     let bounding_box = symbol
         .calc_bounding_box()
         .ok_or(DomSymbolRenderError::NoBoundingBox)?;
-    let draw_target_width = (bounding_box.width() * scale) as i32;
-    let draw_target_height = (bounding_box.height() * scale) as i32;
+    let draw_target_width = (bounding_box.width() * scale) as i32 + padding as i32;
+    let draw_target_height = (bounding_box.height() * scale) as i32 + padding as i32;
 
     let num_frames = symbol.num_frames();
     let mut frames = Vec::with_capacity(num_frames);
@@ -68,8 +75,8 @@ pub fn render_dom_symbol(
         .collect();
 
     let transform = raqote::Transform::create_translation(
-        (-bounding_box.min.x * scale) as f32,
-        (-bounding_box.min.y * scale) as f32,
+        (-bounding_box.min.x * scale) as f32 + (padding / 2.0) as f32,
+        (-bounding_box.min.y * scale) as f32 + (padding / 2.0) as f32,
     )
     .pre_scale(scale as f32, scale as f32);
 
@@ -104,6 +111,11 @@ pub fn render_dom_symbol(
                                     pb.line_to(x, y);
                                 }
                             }
+                            EdgeDefinitionCommand::LineTo(x, y) => {
+                                let x = *x as f32;
+                                let y = *y as f32;
+                                pb.line_to(x, y);
+                            }
                             EdgeDefinitionCommand::Selection(selection_mask) => {
                                 if let Some(_last_selection_mask) = last_selection_mask {
                                     // TODO: Write to target and instantiate new path builder.
@@ -121,24 +133,18 @@ pub fn render_dom_symbol(
                                 let ey = *ey as f32;
                                 pb.quad_to(x, y, ex, ey);
                             }
-                            _ => {
-                                return Err(DomSymbolRenderError::Unsupported(
-                                    "EdgeDefinitionCommand",
-                                ))
-                            }
                         }
                     }
                     pb.close();
 
                     if let Some(selection_mask) = last_selection_mask {
-                        // Ignore multi-flags.
-                        // TODO: handle multi-flags.
-
                         let path = pb.finish().transform(&transform);
 
                         if selection_mask.contains(SelectionMask::FILLSTYLE0) {
                             return Err(DomSymbolRenderError::Unsupported("FILLSTYLE0"));
-                        } else if selection_mask.contains(SelectionMask::FILLSTYLE1) {
+                        }
+
+                        if selection_mask.contains(SelectionMask::FILLSTYLE1) {
                             let fill_style_1_index = edge
                                 .fill_style_1
                                 .ok_or(DomSymbolRenderError::MissingFillStyleIndex(1))?;
@@ -161,8 +167,47 @@ pub fn render_dom_symbol(
                                 a: 0xFF,
                             };
                             target.fill(&path, &raqote::Source::Solid(color), &draw_options);
-                        } else if selection_mask.contains(SelectionMask::STROKE) {
-                            return Err(DomSymbolRenderError::Unsupported("STROKE"));
+                        }
+
+                        if selection_mask.contains(SelectionMask::STROKE) {
+                            let stroke_style_index = edge
+                                .stroke_style
+                                .ok_or(DomSymbolRenderError::MissingStrokeStyleIndex)?;
+                            let stroke_style = shape.get_stroke_style(stroke_style_index).ok_or(
+                                DomSymbolRenderError::MissingStrokeStyle(stroke_style_index),
+                            )?;
+
+                            // Only support solid color for now
+                            let color = stroke_style
+                                .solid_stroke
+                                .fill
+                                .solid_color
+                                .as_ref()
+                                .map(|solid_color| {
+                                    solid_color
+                                        .get_rgb()
+                                        .ok_or(DomSymbolRenderError::InvalidRbg)
+                                })
+                                .unwrap_or(Ok((0, 0, 0)))?;
+
+                            let color = raqote::SolidSource {
+                                r: color.0,
+                                g: color.1,
+                                b: color.2,
+                                a: 0xFF,
+                            };
+
+                            let mut stroke_style = raqote::StrokeStyle::default();
+                            stroke_style.cap = raqote::LineCap::Round;
+                            stroke_style.join = raqote::LineJoin::Round;
+                            stroke_style.width = 20.0 * scale as f32;
+
+                            target.stroke(
+                                &path,
+                                &raqote::Source::Solid(color),
+                                &stroke_style,
+                                &draw_options,
+                            );
                         }
                     }
                 }
