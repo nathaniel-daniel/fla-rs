@@ -1,22 +1,14 @@
+pub mod fla;
 pub mod types;
 
+pub use crate::fla::Fla;
 use crate::types::{
     dom_shape::{
         EdgeDefinitionCommand,
         SelectionMask,
     },
-    DomDocument,
     DomSymbol,
-    LibraryEntry,
 };
-use std::{
-    collections::HashMap,
-    io::{
-        Read,
-        Seek,
-    },
-};
-use zip::ZipArchive;
 
 /// Result type
 pub type FlaResult<T> = Result<T, FlaError>;
@@ -34,43 +26,35 @@ pub enum FlaError {
     Io(#[from] std::io::Error),
 }
 
-/// An Fla struct.
-#[derive(Debug)]
-pub struct Fla {
-    pub dom_document: DomDocument,
-    pub library: HashMap<String, LibraryEntry>,
-}
+#[derive(Debug, thiserror::Error)]
+pub enum DomSymbolRenderError {
+    #[error("Could not determine a bounding box")]
+    NoBoundingBox,
 
-impl Fla {
-    /// Try to get a new fla from a zip file
-    pub fn new<R: Read + Seek>(reader: R) -> FlaResult<Self> {
-        let mut zip = ZipArchive::new(reader)?;
-        let dom_document_file = std::io::BufReader::new(zip.by_name("DOMDocument.xml")?);
-        let dom_document: DomDocument = quick_xml::de::from_reader(dom_document_file)?;
+    #[error("Missing FillStyle{0}")]
+    MissingFillStyleIndex(usize),
 
-        let mut library = HashMap::with_capacity(dom_document.symbols.includes.len());
-        for include in dom_document.symbols.includes.iter() {
-            let name = include.href.clone();
-            let file = std::io::BufReader::new(zip.by_name(&format!("LIBRARY/{}", name))?);
-            let entry = LibraryEntry::from_read(&name, file)?;
-            library.insert(name, entry);
-        }
+    #[error("Missing FillStyle {0}")]
+    MissingFillStyle(u64),
 
-        Ok(Fla {
-            dom_document,
-            library,
-        })
-    }
+    #[error("Missing Color")]
+    MissingColor,
 
-    /// Get an asset from the library
-    pub fn get_library_asset(&self, filename: &str) -> Option<&LibraryEntry> {
-        self.library.get(filename)
-    }
+    #[error("InvalidRbg")]
+    InvalidRbg,
+
+    #[error("unsupported: {0}")]
+    Unsupported(&'static str),
 }
 
 /// Render a DomSymbol.
-pub fn render_dom_symbol(symbol: &DomSymbol, scale: f64) -> Option<Vec<raqote::DrawTarget>> {
-    let bounding_box = symbol.calc_bounding_box()?;
+pub fn render_dom_symbol(
+    symbol: &DomSymbol,
+    scale: f64,
+) -> Result<Vec<raqote::DrawTarget>, DomSymbolRenderError> {
+    let bounding_box = symbol
+        .calc_bounding_box()
+        .ok_or(DomSymbolRenderError::NoBoundingBox)?;
     let draw_target_width = (bounding_box.width() * scale) as i32;
     let draw_target_height = (bounding_box.height() * scale) as i32;
 
@@ -122,7 +106,10 @@ pub fn render_dom_symbol(symbol: &DomSymbol, scale: f64) -> Option<Vec<raqote::D
                             }
                             EdgeDefinitionCommand::Selection(selection_mask) => {
                                 if let Some(_last_selection_mask) = last_selection_mask {
-                                    return None; // TODO: Write to target and instantiate new path builder.
+                                    // TODO: Write to target and instantiate new path builder.
+                                    return Err(DomSymbolRenderError::Unsupported(
+                                        "SelectionMask overwrite",
+                                    ));
                                 } else {
                                     last_selection_mask = Some(selection_mask);
                                 }
@@ -134,7 +121,11 @@ pub fn render_dom_symbol(symbol: &DomSymbol, scale: f64) -> Option<Vec<raqote::D
                                 let ey = *ey as f32;
                                 pb.quad_to(x, y, ex, ey);
                             }
-                            _ => return None, // Unsupported Command
+                            _ => {
+                                return Err(DomSymbolRenderError::Unsupported(
+                                    "EdgeDefinitionCommand",
+                                ))
+                            }
                         }
                     }
                     pb.close();
@@ -146,13 +137,22 @@ pub fn render_dom_symbol(symbol: &DomSymbol, scale: f64) -> Option<Vec<raqote::D
                         let path = pb.finish().transform(&transform);
 
                         if selection_mask.contains(SelectionMask::FILLSTYLE0) {
-                            return None; // Unsupported
+                            return Err(DomSymbolRenderError::Unsupported("FILLSTYLE0"));
                         } else if selection_mask.contains(SelectionMask::FILLSTYLE1) {
-                            let fill_style_1_index = edge.fill_style_1?;
-                            let fill_style_1 = shape.get_fill_style(fill_style_1_index)?;
+                            let fill_style_1_index = edge
+                                .fill_style_1
+                                .ok_or(DomSymbolRenderError::MissingFillStyleIndex(1))?;
+                            let fill_style_1 = shape.get_fill_style(fill_style_1_index).ok_or(
+                                DomSymbolRenderError::MissingFillStyle(fill_style_1_index),
+                            )?;
 
                             // Only support solid color for now
-                            let color = fill_style_1.solid_color.as_ref()?.get_rgb()?;
+                            let color = fill_style_1
+                                .solid_color
+                                .as_ref()
+                                .ok_or(DomSymbolRenderError::MissingColor)?
+                                .get_rgb()
+                                .ok_or(DomSymbolRenderError::InvalidRbg)?;
 
                             let color = raqote::SolidSource {
                                 r: color.0,
@@ -162,7 +162,7 @@ pub fn render_dom_symbol(symbol: &DomSymbol, scale: f64) -> Option<Vec<raqote::D
                             };
                             target.fill(&path, &raqote::Source::Solid(color), &draw_options);
                         } else if selection_mask.contains(SelectionMask::STROKE) {
-                            return None; // Unsupported
+                            return Err(DomSymbolRenderError::Unsupported("STROKE"));
                         }
                     }
                 }
@@ -172,5 +172,5 @@ pub fn render_dom_symbol(symbol: &DomSymbol, scale: f64) -> Option<Vec<raqote::D
         frames.push(target);
     }
 
-    Some(frames)
+    Ok(frames)
 }
