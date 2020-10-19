@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["fla"] = [{"text":"impl From&lt;ParseFloatError&gt; for FromStrError","synthetic":false,"types":[]},{"text":"impl From&lt;ParseIntError&gt; for FromStrError","synthetic":false,"types":[]},{"text":"impl From&lt;ZipError&gt; for FlaError","synthetic":false,"types":[]},{"text":"impl From&lt;DeError&gt; for FlaError","synthetic":false,"types":[]},{"text":"impl From&lt;Error&gt; for FlaError","synthetic":false,"types":[]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

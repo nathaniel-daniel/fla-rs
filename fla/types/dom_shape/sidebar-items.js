@@ -1,0 +1,1 @@
+initSidebarItems({"mod":[["edge",""]],"struct":[["DomShape",""],["Edges",""],["Fill",""],["FillStyle",""],["Fills",""],["Matrices",""],["Matrix",""],["SolidColor",""],["SolidStroke",""],["StrokeStyle",""],["Strokes",""]]});
